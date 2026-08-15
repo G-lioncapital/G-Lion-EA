@@ -27,14 +27,28 @@ jobs:
           $content = $content -replace 'InpLicenseKey    = "N/A"', "InpLicenseKey    = `"${{ github.event.client_payload.license_key }}`""
           Set-Content -Path $file -Value $content
 
-      - name: Compile EA with MetaEditor
-        continue-on-error: true
+      - name: Compile EA inside Official MT5 Directory
         run: |
           $metaeditor = "C:\Program Files\MetaTrader 5\metaeditor64.exe"
-          $source = "${{ github.workspace }}\MQL5\Experts\GridLayerEA.mq5"
-          $log = "${{ github.workspace }}\compile.log"
+          $mt5_mql5 = "C:\Program Files\MetaTrader 5\MQL5\Experts"
+          
+          # Ensure standard path exists and copy our EA there
+          New-Item -ItemType Directory -Force -Path $mt5_mql5
+          Copy-Item -Path "${{ github.workspace }}\MQL5\Experts\GridLayerEA.mq5" -Destination "$mt5_mql5\GridLayerEA.mq5" -Force
+          
+          $source = "$mt5_mql5\GridLayerEA.mq5"
+          $log = "$mt5_mql5\compile.log"
+          
+          # Compile
           Start-Process -FilePath $metaeditor -ArgumentList "/compile:`"$source`" /log:`"$log`"" -Wait
+          
+          # Print log to help debug if it fails again
           if (Test-Path $log) { Get-Content $log }
+          
+          # Bring compiled file back to workspace
+          if (Test-Path "$mt5_mql5\GridLayerEA.ex5") {
+            Copy-Item -Path "$mt5_mql5\GridLayerEA.ex5" -Destination "${{ github.workspace }}\MQL5\Experts\GridLayerEA.ex5" -Force
+          }
 
       - name: Send Compiled .ex5 File to Telegram Bot
         shell: bash
@@ -49,7 +63,7 @@ jobs:
           
           # Check if the file actually compiled
           if [ ! -f "$EX5_PATH" ]; then
-            echo "ERROR: The .ex5 file was not found! The compiler failed."
+            echo "ERROR: The .ex5 file was not found! The compiler failed to generate it."
             exit 1
           fi
 
