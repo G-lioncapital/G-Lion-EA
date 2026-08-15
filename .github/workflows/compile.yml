@@ -18,6 +18,14 @@ jobs:
           Start-Process -FilePath "mt5setup.exe" -ArgumentList "/auto" -Wait
           Start-Sleep -Seconds 30
 
+      - name: Auto-Download Missing MQL5 Standard Libraries
+        run: |
+          Write-Output "Downloading missing Include files from MQL5 mirror..."
+          git clone https://github.com/Endt4sk/MQL5.git temp_mql5
+          New-Item -ItemType Directory -Force -Path "${{ github.workspace }}\MQL5\Include"
+          Copy-Item -Path temp_mql5\Include\* -Destination "${{ github.workspace }}\MQL5\Include" -Recurse -Force
+          Write-Output "Library download complete!"
+
       - name: Inject Client Credentials into Source Code
         run: |
           $file = "${{ github.workspace }}\MQL5\Experts\GridLayerEA.mq5"
@@ -33,7 +41,8 @@ jobs:
           $metaeditor = "C:\Program Files\MetaTrader 5\metaeditor64.exe"
           $source = "${{ github.workspace }}\MQL5\Experts\GridLayerEA.mq5"
           $log = "${{ github.workspace }}\compile.log"
-          Start-Process -FilePath $metaeditor -ArgumentList "/compile:`"$source`" /log:`"$log`"" -Wait
+          $include = "${{ github.workspace }}\MQL5"
+          Start-Process -FilePath $metaeditor -ArgumentList "/compile:`"$source`" /inc:`"$include`" /log:`"$log`"" -Wait
 
       - name: Send Compiled .ex5 File to Telegram Bot
         shell: pwsh
@@ -51,13 +60,9 @@ jobs:
           
           $bot_token = "${{ secrets.TELEGRAM_BOT_TOKEN }}"
           $chat_id = "${{ github.event.client_payload.chat_id }}"
-          
-          # Native PowerShell formatting for the Telegram caption
           $caption = "✅ <b>GridLayerEA Generated</b>`n`n🔑 MT5 ID: ${{ github.event.client_payload.mt5_id }}`n⏳ Expiry: ${{ github.event.client_payload.expiry_date }}`n🔐 License Key: ${{ github.event.client_payload.license_key }}"
-          
           $uri = "https://api.telegram.org/bot$bot_token/sendDocument"
           
-          # Build the file upload payload
           $form = @{
               chat_id = $chat_id
               caption = $caption
