@@ -27,52 +27,31 @@ jobs:
           $content = $content -replace 'InpLicenseKey    = "N/A"', "InpLicenseKey    = `"${{ github.event.client_payload.license_key }}`""
           Set-Content -Path $file -Value $content
 
-      - name: Compile EA inside Official MT5 Directory
+      - name: Compile EA with MetaEditor
+        continue-on-error: true
         run: |
           $metaeditor = "C:\Program Files\MetaTrader 5\metaeditor64.exe"
-          $mt5_mql5 = "C:\Program Files\MetaTrader 5\MQL5\Experts"
-          
-          # Ensure standard path exists and copy our EA there
-          New-Item -ItemType Directory -Force -Path $mt5_mql5
-          Copy-Item -Path "${{ github.workspace }}\MQL5\Experts\GridLayerEA.mq5" -Destination "$mt5_mql5\GridLayerEA.mq5" -Force
-          
-          $source = "$mt5_mql5\GridLayerEA.mq5"
-          $log = "$mt5_mql5\compile.log"
-          
-          # Compile
+          $source = "${{ github.workspace }}\MQL5\Experts\GridLayerEA.mq5"
+          $log = "${{ github.workspace }}\compile.log"
           Start-Process -FilePath $metaeditor -ArgumentList "/compile:`"$source`" /log:`"$log`"" -Wait
-          
-          # Print log to help debug if it fails again
-          if (Test-Path $log) { Get-Content $log }
-          
-          # Bring compiled file back to workspace
-          if (Test-Path "$mt5_mql5\GridLayerEA.ex5") {
-            Copy-Item -Path "$mt5_mql5\GridLayerEA.ex5" -Destination "${{ github.workspace }}\MQL5\Experts\GridLayerEA.ex5" -Force
-          }
 
       - name: Send Compiled .ex5 File to Telegram Bot
-        shell: bash
-        env:
-          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          CHAT_ID: ${{ github.event.client_payload.chat_id }}
-          MT5_ID: ${{ github.event.client_payload.mt5_id }}
-          EXPIRY: ${{ github.event.client_payload.expiry_date }}
-          LICENSE: ${{ github.event.client_payload.license_key }}
         run: |
-          EX5_PATH="${{ github.workspace }}/MQL5/Experts/GridLayerEA.ex5"
+          $ex5 = "${{ github.workspace }}\MQL5\Experts\GridLayerEA.ex5"
+          $log = "${{ github.workspace }}\compile.log"
           
-          # Check if the file actually compiled
-          if [ ! -f "$EX5_PATH" ]; then
-            echo "ERROR: The .ex5 file was not found! The compiler failed to generate it."
-            exit 1
-          fi
+          # Check if the file compiled successfully
+          if (-Not (Test-Path $ex5)) {
+              Write-Output "❌ ERROR: The compiler failed to generate the .ex5 file!"
+              Write-Output "--- METAEDITOR COMPILE LOG ---"
+              if (Test-Path $log) { Get-Content $log }
+              exit 1
+          }
 
-          # Format the Telegram caption
-          CAPTION=$(printf "✅ <b>GridLayerEA Generated</b>\n\n🔑 MT5 ID: %s\n⏳ Expiry: %s\n🔐 License Key: %s" "$MT5_ID" "$EXPIRY" "$LICENSE")
+          # If successful, send to Telegram
+          $bot_token = "${{ secrets.TELEGRAM_BOT_TOKEN }}"
+          $chat_id = "${{ github.event.client_payload.chat_id }}"
+          $caption = "✅ <b>GridLayerEA Generated</b>%0A%0A🔑 MT5 ID: ${{ github.event.client_payload.mt5_id }}%0A⏳ Expiry: ${{ github.event.client_payload.expiry_date }}%0A🔐 License Key: ${{ github.event.client_payload.license_key }}"
           
-          # Send the file securely via Telegram API
-          curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument" \
-            -F "chat_id=${CHAT_ID}" \
-            -F "document=@${EX5_PATH}" \
-            -F "caption=${CAPTION}" \
-            -F "parse_mode=HTML"
+          Write-Output "File found! Sending to Telegram..."
+          & curl.exe -s -F "document=@$ex5" -F "chat_id=$chat_id" -F "caption=$caption" -F "parse_mode=HTML" "https://api.telegram.org/bot$bot_token/sendDocument"
