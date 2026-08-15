@@ -20,7 +20,7 @@ jobs:
 
       - name: Inject Client Credentials into Source Code
         run: |
-          $file = "MQL5/Experts/GridLayerEA.mq5"
+          $file = "${{ github.workspace }}\MQL5\Experts\GridLayerEA.mq5"
           $content = Get-Content -Path $file -Raw
           $content = $content -replace 'InpCustomAccount = 0', "InpCustomAccount = ${{ github.event.client_payload.mt5_id }}"
           $content = $content -replace 'InpExpiryDate    = "2026.12.31"', "InpExpiryDate    = `"${{ github.event.client_payload.expiry_date }}`""
@@ -28,11 +28,15 @@ jobs:
           Set-Content -Path $file -Value $content
 
       - name: Compile EA with MetaEditor
+        continue-on-error: true
         run: |
           $metaeditor = "C:\Program Files\MetaTrader 5\metaeditor64.exe"
-          & $metaeditor /compile:"MQL5\Experts\GridLayerEA.mq5" /log:"compile.log"
-          Get-Content "compile.log"
+          $source = "${{ github.workspace }}\MQL5\Experts\GridLayerEA.mq5"
+          $log = "${{ github.workspace }}\compile.log"
+          Start-Process -FilePath $metaeditor -ArgumentList "/compile:`"$source`" /log:`"$log`"" -Wait
+          if (Test-Path $log) { Get-Content $log }
 
       - name: Send Compiled .ex5 File to Telegram Bot
         run: |
-          curl.exe -s -F document=@"MQL5\Experts\GridLayerEA.ex5" -F chat_id="${{ github.event.client_payload.chat_id }}" -F caption="✅ <b>GridLayerEA Generated</b>%0A%0A🔑 MT5 ID: ${{ github.event.client_payload.mt5_id }}%0A⏳ Expiry: ${{ github.event.client_payload.expiry_date }}%0A🔐 License Key: ${{ github.event.client_payload.license_key }}" -F parse_mode="HTML" https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendDocument
+          $ex5 = "${{ github.workspace }}\MQL5\Experts\GridLayerEA.ex5"
+          curl.exe -s -F document=@"$ex5" -F chat_id="${{ github.event.client_payload.chat_id }}" -F caption="✅ <b>GridLayerEA Generated</b>%0A%0A🔑 MT5 ID: ${{ github.event.client_payload.mt5_id }}%0A⏳ Expiry: ${{ github.event.client_payload.expiry_date }}%0A🔐 License Key: ${{ github.event.client_payload.license_key }}" -F parse_mode="HTML" https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendDocument
