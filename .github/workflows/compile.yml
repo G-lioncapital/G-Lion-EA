@@ -1,24 +1,8 @@
 name: Compile & Send EA to Telegram
 
 on:
-  workflow_dispatch:
-    inputs:
-      mt5_id:
-        description: 'Client MT5 ID'
-        required: true
-        default: '123456'
-      expiry_date:
-        description: 'Expiry Date (YYYY.MM.DD)'
-        required: true
-        default: '2026.12.31'
-      license_key:
-        description: 'Encrypted License Key'
-        required: true
-        default: 'TEST-KEY-123'
-      chat_id:
-        description: 'Telegram Chat ID to receive the file'
-        required: true
-        default: '1678695607'
+  repository_dispatch:
+    types: [compile_ea]
 
 jobs:
   build:
@@ -36,19 +20,19 @@ jobs:
 
       - name: Inject Client Credentials into Source Code
         run: |
-          $file = "MQL5/Experts/G.Lion Prime.mq5"
+          $file = "MQL5/Experts/GridLayerEA.mq5"
           $content = Get-Content -Path $file -Raw
-          $content = $content -replace 'InpCustomAccount = 0', "InpCustomAccount = ${{ github.event.inputs.mt5_id }}"
-          $content = $content -replace 'InpExpiryDate    = "2026.12.31"', "InpExpiryDate    = `"${{ github.event.inputs.expiry_date }}`""
-          $content = $content -replace 'InpLicenseKey    = "N/A"', "InpLicenseKey    = `"${{ github.event.inputs.license_key }}`""
+          $content = $content -replace 'InpCustomAccount = 0', "InpCustomAccount = ${{ github.event.client_payload.mt5_id }}"
+          $content = $content -replace 'InpExpiryDate    = "2026.12.31"', "InpExpiryDate    = `"${{ github.event.client_payload.expiry_date }}`""
+          $content = $content -replace 'InpLicenseKey    = "N/A"', "InpLicenseKey    = `"${{ github.event.client_payload.license_key }}`""
           Set-Content -Path $file -Value $content
 
       - name: Compile EA with MetaEditor
         run: |
           $metaeditor = "C:\Program Files\MetaTrader 5\metaeditor64.exe"
-          & $metaeditor /compile:"MQL5\Experts\G.Lion Prime.mq5" /log:"compile.log"
+          & $metaeditor /compile:"MQL5\Experts\GridLayerEA.mq5" /log:"compile.log"
           Get-Content "compile.log"
 
       - name: Send Compiled .ex5 File to Telegram Bot
         run: |
-          curl.exe -s -F document=@"MQL5\Experts\G.Lion Prime.ex5" -F chat_id="${{ github.event.inputs.chat_id }}" -F caption="✅ <b>G.Lion Prime Generated</b>%0A%0A🔑 MT5 ID: ${{ github.event.inputs.mt5_id }}%0A⏳ Expiry: ${{ github.event.inputs.expiry_date }}" -F parse_mode="HTML" https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendDocument
+          curl.exe -s -F document=@"MQL5\Experts\GridLayerEA.ex5" -F chat_id="${{ github.event.client_payload.chat_id }}" -F caption="✅ <b>GridLayerEA Generated</b>%0A%0A🔑 MT5 ID: ${{ github.event.client_payload.mt5_id }}%0A⏳ Expiry: ${{ github.event.client_payload.expiry_date }}%0A🔐 License Key: ${{ github.event.client_payload.license_key }}" -F parse_mode="HTML" https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendDocument
