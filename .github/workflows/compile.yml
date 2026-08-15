@@ -37,6 +37,28 @@ jobs:
           if (Test-Path $log) { Get-Content $log }
 
       - name: Send Compiled .ex5 File to Telegram Bot
+        shell: bash
+        env:
+          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ github.event.client_payload.chat_id }}
+          MT5_ID: ${{ github.event.client_payload.mt5_id }}
+          EXPIRY: ${{ github.event.client_payload.expiry_date }}
+          LICENSE: ${{ github.event.client_payload.license_key }}
         run: |
-          $ex5 = "${{ github.workspace }}\MQL5\Experts\GridLayerEA.ex5"
-          curl.exe -s -F document=@"$ex5" -F chat_id="${{ github.event.client_payload.chat_id }}" -F caption="✅ <b>GridLayerEA Generated</b>%0A%0A🔑 MT5 ID: ${{ github.event.client_payload.mt5_id }}%0A⏳ Expiry: ${{ github.event.client_payload.expiry_date }}%0A🔐 License Key: ${{ github.event.client_payload.license_key }}" -F parse_mode="HTML" https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendDocument
+          EX5_PATH="${{ github.workspace }}/MQL5/Experts/GridLayerEA.ex5"
+          
+          # Check if the file actually compiled
+          if [ ! -f "$EX5_PATH" ]; then
+            echo "ERROR: The .ex5 file was not found! The compiler failed."
+            exit 1
+          fi
+
+          # Format the Telegram caption
+          CAPTION=$(printf "✅ <b>GridLayerEA Generated</b>\n\n🔑 MT5 ID: %s\n⏳ Expiry: %s\n🔐 License Key: %s" "$MT5_ID" "$EXPIRY" "$LICENSE")
+          
+          # Send the file securely via Telegram API
+          curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument" \
+            -F "chat_id=${CHAT_ID}" \
+            -F "document=@${EX5_PATH}" \
+            -F "caption=${CAPTION}" \
+            -F "parse_mode=HTML"
