@@ -36,22 +36,42 @@ jobs:
           Start-Process -FilePath $metaeditor -ArgumentList "/compile:`"$source`" /log:`"$log`"" -Wait
 
       - name: Send Compiled .ex5 File to Telegram Bot
+        shell: pwsh
         run: |
           $ex5 = "${{ github.workspace }}\MQL5\Experts\GridLayerEA.ex5"
           $log = "${{ github.workspace }}\compile.log"
           
-          # Check if the file compiled successfully
           if (-Not (Test-Path $ex5)) {
               Write-Output "❌ ERROR: The compiler failed to generate the .ex5 file!"
-              Write-Output "--- METAEDITOR COMPILE LOG ---"
               if (Test-Path $log) { Get-Content $log }
               exit 1
           }
 
-          # If successful, send to Telegram
+          Write-Output "File found! Uploading directly via PowerShell..."
+          
           $bot_token = "${{ secrets.TELEGRAM_BOT_TOKEN }}"
           $chat_id = "${{ github.event.client_payload.chat_id }}"
-          $caption = "✅ <b>GridLayerEA Generated</b>%0A%0A🔑 MT5 ID: ${{ github.event.client_payload.mt5_id }}%0A⏳ Expiry: ${{ github.event.client_payload.expiry_date }}%0A🔐 License Key: ${{ github.event.client_payload.license_key }}"
           
-          Write-Output "File found! Sending to Telegram..."
-          & curl.exe -s -F "document=@$ex5" -F "chat_id=$chat_id" -F "caption=$caption" -F "parse_mode=HTML" "https://api.telegram.org/bot$bot_token/sendDocument"
+          # Native PowerShell formatting for the Telegram caption
+          $caption = "✅ <b>GridLayerEA Generated</b>`n`n🔑 MT5 ID: ${{ github.event.client_payload.mt5_id }}`n⏳ Expiry: ${{ github.event.client_payload.expiry_date }}`n🔐 License Key: ${{ github.event.client_payload.license_key }}"
+          
+          $uri = "https://api.telegram.org/bot$bot_token/sendDocument"
+          
+          # Build the file upload payload
+          $form = @{
+              chat_id = $chat_id
+              caption = $caption
+              parse_mode = "HTML"
+              document = Get-Item -Path $ex5
+          }
+          
+          try {
+              $response = Invoke-RestMethod -Uri $uri -Method Post -Form $form
+              Write-Output "✅ Successfully delivered to Telegram!"
+              $response | ConvertTo-Json
+          } catch {
+              Write-Output "❌ Telegram API Error:"
+              Write-Output $_.Exception.Message
+              if ($_.ErrorDetails) { Write-Output $_.ErrorDetails.Message }
+              exit 1
+          }
